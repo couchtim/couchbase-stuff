@@ -8,8 +8,8 @@
     exit 1
 }
 
-a_node=shift
-output_dir=shift
+a_node=$1; shift
+output_dir=$1; shift
 
 output_dir=$output_dir/info-`date +%Y-%m-%d`
 echo "Saving mbcollect_info in '$output_dir'"
