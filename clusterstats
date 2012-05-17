@@ -1,0 +1,175 @@
+#! /bin/sh
+
+# This script is in the public domain, and comes with NO WARRANTY OF ANY KIND
+
+# This script reads a list of all hosts in a cluster from the Couchbase
+# REST API, and then logs stats from each host repeatedly. When some error
+# is happening infrequently, this can be a helpful tool to correlate the time
+# of the error with before and after statistics, to identify what was happening
+# on the cluster at that specific time.
+
+# This script depends on curl and Python 2.6 for getting the list of hosts. If
+# that's a portability concern, you could hard-code the list of hosts instead.
+
+cluster="localhost:8091"
+dir="cbstats-`date +%Y%m%d-%H%M%S`"
+sleepSeconds=10
+
+export PATH
+PATH=/opt/couchbase/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/local/sbin
+
+die () { echo "Fatal error: $0:" "$@" >&2; exit 1; }
+
+wantHelp=no
+usageError=
+while [ $# -gt 0 ]; do
+    case $1 in
+        '-?'|-h|--help)
+            wantHelp=yes
+            shift
+            ;;
+
+        -c|--cluster|--cluster=*)
+            if echo "$1" | grep '=' > /dev/null; then
+                cluster=`echo "$1" | sed 's/^[^=]*=//'`
+            else
+                cluster=$2
+                shift
+            fi
+
+            if expr "$cluster" : '.*:[0-9][0-9]*$' > /dev/null; then
+                :
+            else
+                cluster="$cluster:8091"
+            fi
+
+            shift
+            ;;
+
+        -d|--dir|--dir=*)
+            if echo "$1" | grep '=' > /dev/null; then
+                dir=`echo "$1" | sed 's/^[^=]*=//'`
+            else
+                dir=$2
+                shift
+            fi
+            shift
+            ;;
+
+        -s|--sleep|--sleep=*)
+            if echo "$1" | grep '=' > /dev/null; then
+                sleepSeconds=`echo "$1" | sed 's/^[^=]*=//'`
+            else
+                sleepSeconds=$2
+                shift
+            fi
+            shift
+            ;;
+
+        --)
+            shift
+            break
+            ;;
+
+        -*)
+            usageError=$1
+            wantHelp=yes
+            break;
+            ;;
+
+        *)
+            # Non-option argument
+            break
+            ;;
+
+    esac
+done
+
+if [ $wantHelp = yes ]; then
+    if [ -n "$usageError" ]; then
+        exec 1>&2  # Write to stderr
+        exitStatus=2
+        echo "Unrecognized option: $usageError"
+    else
+        exitStatus=0
+    fi
+    cat <<EOF
+Usage: $0 [OPTIONS] [STATS]
+
+Options:
+  -c|--cluster   HOST[:PORT]    $cluster
+  -d|--dir       DIRECTORY      $dir
+  -s|--sleep     SECONDS        $sleepSeconds
+
+Stats:
+  Any that the 'cbstats' command recognizes. Defaults are:
+    all timings tap
+
+  Also, the moxi stats 'proxy' and 'proxy timings' are recognized
+
+Example:
+  $0 -c cb-1.example.com --dir=\$TMP/cbstats all 'dispatcher logs'
+  $0 -c 10.4.2.14:8091 -s 5
+
+EOF
+
+  exit $exitStatus
+fi
+
+if [ $# -eq 0 ]; then
+    set -- all tap timings
+fi
+
+# Get the list of hosts from the Couchbase REST API. This is somewhat brittle
+# depending on the output formatting of Python's json.tool helper
+hosts=`curl -sS http://"$cluster"/pools/default | python2.6 -mjson.tool | grep "hostname" | cut -d\" -f4 | cut -d: -f1 | xargs`
+[ $? -ne 0 -o -z "$hosts" ] && die "could not get hosts from cluster at '$cluster'"
+
+echo "Every $sleepSeconds seconds, grabbing [$@] stats"
+echo "Cluster hosts: $hosts"
+echo "Writing to $dir/stats-HOST.txt files"
+echo " "
+echo "Create a file called $dir/STOP, to stop"
+echo " "
+
+[ -d "$dir" ] || mkdir -p "$dir" || die "could not create output directory '$dir'"
+
+# Let the message be read
+sleep 2
+
+
+rm -f "$dir"/STOP
+
+for host in $hosts; do
+    (
+        while true; do
+            [ -r "$dir"/STOP ] && exit 0;
+
+            echo "  $host `date`" >&2
+
+            for stat in "$@"; do
+                echo "=== $stat  `date`"
+                case $stat in
+                    'proxy'|'proxy timings')
+                        # These are moxi-specific, cbstats doesn't handle them
+                        echo stats $stat | nc "$host" 11211
+                        ;;
+                    *)
+                        # NB: stat could be multi-word (e.g., 'dispatcher logs')
+                        cbstats -a "$host":11210 $stat _admin _admin
+                        ;;
+                esac
+            done
+
+            [ -r STOP ] && exit 0;
+
+            sleep $sleepSeconds
+        done
+    ) > "$dir"/stats-"$host".txt &
+done
+
+trap 'echo "Quitting ..."' 2 3 15
+
+wait
+
+touch "$dir"/STOP
