@@ -21,24 +21,21 @@ mkdir -p "$output_dir"
 
 cat <<EOF
 Collection about to commence; expect a jumble of output as this is run in
-parallel on all hosts.
+parallel on all hosts. Results will be in $output_dir.
 EOF
 sleep 3;
 
 for h in $hosts; do
-    # Turn "whatever-membase12.myhost.com" into "mb12"
-    # TODO How to assume way less about host names?
-    short=`echo $h | sed 's/^.*membase/mb/; s/[^0-9]*$//'`
-
     # Run in the background, so they all go in parallel
     # TODO `mktemp` works on Linux, but isn't terribly portable across various *nix
     ssh $h \
         'f=`mktemp`; /opt/membase/bin/mbcollect_info -v $f && cat $f && rm $f' \
-        > "$output_dir/$short.zip" &
+        > "$output_dir/$h.zip" &
 done
 
 wait
 
+echo " "
 echo "Done - $output_dir:"
 ls -lh "$output_dir"
 
