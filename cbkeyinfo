@@ -1,0 +1,78 @@
+#! /usr/bin/env python
+
+# This script is in the PUBLIC DOMAIN and comes with NO WARRANTY OF ANY KIND.
+# Written by Tim Smith <tim@couchbase.com> This script is unsupported. It did
+# work for me at the time it was written.
+
+# The Couchbase client library is not installed in the default python path,
+# so in most cases it is necessary to tell Python where to find it. An
+# example of calling this program:
+#
+# $ PYTHONPATH=/opt/couchbase/lib/python ./cbkeyinfo  --cluster 10.4.2.14:11211 foo bar 
+# {'key_cas': '854284',
+#  'key_data_age': '0',
+#  'key_dirtied': '0',
+#  'key_exptime': '0',
+#  'key_flags': '0',
+#  'key_is_dirty': '0',
+#  'key_last_modification_time': '1348701870',
+#  'key_name': 'foo',
+#  'key_valid': 'valid'}
+# {'key_name': 'bar'}
+#
+# Here the 'foo' key exists, and the 'bar' key does not. The stats command does
+# not return an error when the key doesn't exist when going through moxi (on port
+# 11211).
+#
+# Here is an example talking directly to memcached (on port 11210), instead:
+#
+# $ PYTHONPATH=/opt/couchbase/lib/python ./cbkeyinfo  --cluster 10.4.2.14:11210 foo bar 
+# ERROR: key 'foo', <MemcachedError #4 ``Invalid arguments''>
+# ERROR: key 'bar', <MemcachedError #1 ``Not found''>
+# $ PYTHONPATH=/opt/couchbase/lib/python ./cbkeyinfo  --cluster 10.4.2.12:11210 foo bar
+# {'key_cas': '854284',
+#  'key_data_age': '0',
+#  'key_dirtied': '0',
+#  'key_exptime': '0',
+#  'key_flags': '0',
+#  'key_is_dirty': '0',
+#  'key_last_modification_time': '1348702370',
+#  'key_name': 'foo',
+#  'key_valid': 'valid'}
+# ERROR: key 'bar', <MemcachedError #4 ``Invalid arguments''>
+#
+# If you get an "Invalid Arguments" error, you asked for a key that doesn't
+# live on that node. If you get "Not found", you asked the right node, but
+# the key doesn't exist.
+
+import mc_bin_client
+from optparse import OptionParser
+from pprint import pformat, pprint
+import zlib
+
+def vbucket_id_for_key(key, vbucket_count = 1024):
+    return int((zlib.crc32(key) >> 16) & (vbucket_count - 1))
+
+parser = OptionParser()
+parser.add_option("-c", "--cluster", dest="cluster", default="localhost:11211", help="cluster HOST:PORT")
+parser.add_option("-b", "--bucket", dest="bucket", default="default", help="bucket name")
+parser.add_option("-p", "--password", dest="password", default="", help="bucket password")
+
+(options, args) = parser.parse_args()
+
+#pprint(options)
+#pprint(args)
+
+host, port = options.cluster.split(':')
+port = int(port)
+
+mc = mc_bin_client.MemcachedClient(host, port)
+mc.sasl_auth_plain(options.bucket, options.password)
+
+for key in args:
+    try:
+        stats = mc.stats('vkey %s %d' % (key, vbucket_id_for_key(key)))
+        stats['key_name'] = key
+        pprint(stats)
+    except mc_bin_client.MemcachedError, e:
+        print "ERROR: key '%s', %s" % (key, pformat(e))
