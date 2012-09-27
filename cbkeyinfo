@@ -71,8 +71,10 @@ mc.sasl_auth_plain(options.bucket, options.password)
 
 for key in args:
     try:
-        stats = mc.stats('vkey %s %d' % (key, vbucket_id_for_key(key)))
+        vbid = vbucket_id_for_key(key)
+        stats = mc.stats('vkey %s %d' % (key, vbid))
         stats['key_name'] = key
+        stats['key_vbucket'] = vbid
         pprint(stats)
     except mc_bin_client.MemcachedError, e:
         print "ERROR: key '%s', %s" % (key, pformat(e))
