@@ -1,0 +1,23 @@
+#! /bin/sh
+
+die () { echo "FATAL ERROR:" "$@" >&2; exit 2; }
+
+sqlite=/opt/couchbase/bin/sqlite3
+if [ ! -x "$sqlite" ]; then die "Can't find sqlite command-line executable at '$sqlite'"; fi
+
+if [ $# -ne 1 ]; then
+    echo "Usage: $0 /path/to/bucket-data/bucket"
+    echo "ex: $0 /opt/couchbase/var/lib/couchbase/data/default-data/default"
+    exit 1
+fi
+
+bucket=$1
+
+active=`"$sqlite" "$bucket" 'SELECT vbid FROM vbucket_states WHERE state LIKE "active"' | xargs`
+
+echo "# $active"
+for vbid in $active; do
+    part=`expr "$vbid" \% 4`
+    file="$bucket-$part.mb"
+    "$sqlite" "$file" "SELECT hex(k) FROM kv_$vbid"
+done
