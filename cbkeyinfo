@@ -53,7 +53,7 @@ import zlib
 def vbucket_id_for_key(key, vbucket_count = 1024):
     return int((zlib.crc32(key) >> 16) & (vbucket_count - 1))
 
-parser = OptionParser()
+parser = OptionParser(usage = "usage: %prog [options] key1 [key2...]")
 parser.add_option("-c", "--cluster", dest="cluster", default="localhost:11211", help="cluster HOST:PORT")
 parser.add_option("-b", "--bucket", dest="bucket", default="default", help="bucket name")
 parser.add_option("-p", "--password", dest="password", default="", help="bucket password")
