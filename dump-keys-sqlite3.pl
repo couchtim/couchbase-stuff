@@ -76,7 +76,7 @@ for my $part (0, 1, 2, 3) {
             printf STDERR "%2d%% matched %d / seen %d items  # vbucket: %d (%d/%d)\n",
                     int($vbucket_progress / scalar(@active) * 100),
                     $matched_items, $total_items, $vbid, $vbucket_progress, scalar(@active)
-                if $total_items % 5_000 == 0;
+                if $total_items % 50_000 == 0;
         }
         unless (close RESULTS) {
             ++$errors;
