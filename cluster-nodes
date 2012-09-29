@@ -1,0 +1,13 @@
+#! /bin/sh
+
+one=$1
+if [ -z "$one" ]; then
+    echo "Usage: $0 cluster-ip"
+    exit 1
+fi
+
+curl --connect-timeout 5 -sS http://"$one":8091/pools/default \
+  | grep -o '"hostname":"[^" ]*"' \
+  | cut -d\" -f 4 \
+  | cut -d\: -f1 \
+  | sort -n
