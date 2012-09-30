@@ -52,7 +52,7 @@ for key in fileinput.input(args):
         count += 1
     except mc_bin_client.MemcachedError, e:
         errors += 1
-        print "DELETE ERROR '%s': %s" % (key, e)
+        print "DELETE ERROR '%s': %s" % (e, key)
 
 print "Done (deleted %d keys)" % (count,)
 
