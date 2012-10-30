@@ -1,0 +1,142 @@
+#! /usr/bin/perl
+
+# Combine Couchbase log files by timestamp, filter messages
+
+use strict;
+use warnings;
+
+use Data::Dumper;
+$Data::Dumper::Terse = 1;
+$Data::Dumper::Indent = 0;
+
+my @logs;
+foreach my $logname (@ARGV) {
+    my $l = LogReader->new($logname);
+    LogReader::put_reader_in_list(\@logs, $l);
+}
+
+my $count = 0;
+while (@logs) {
+    my $before = scalar(@logs);
+    my $l = shift @logs;
+
+    print $l->cur_msg, "\n"
+        unless $l->{cur}{mod} eq 'couchdb';
+
+    $l->advance;
+    LogReader::put_reader_in_list(\@logs, $l);
+    my $after = scalar(@logs);
+
+    #last if ++$count > 999;
+}
+
+exit 0;
+
+
+package LogReader;
+
+sub put_reader_in_list {
+    my ($list, $log) = @_;
+
+    unless ($log->{cur}) {
+        print STDERR "End of '$log->{n}', list has ", scalar(@$list), " readers\n";
+        return;
+    }
+
+    my $i;
+    for ($i = 0; $i < @$list; ++$i) {
+        last if $log->{cur}{time} lt $list->[$i]{cur}{time};
+    }
+    #warn "DEBUG: Splicing $log->{n}:$log->{cur}{time} at $i, list has ", scalar(@$list), " readers\n" if $i > 0;
+    splice @$list, $i, 0, $log;
+}
+
+sub new {
+    my $class = shift;
+    my ($logname) = @_;
+    my $self = bless({}, ref($class) || $class);
+    $self->{n} = $logname;
+    open $self->{f}, '<', $self->{n} or die "Can't open $self->{n}: $!\n";
+
+    $self->{cur} = undef;
+    $self->{next} = undef;
+    # Read top of log file, dump junk until first well-formed line is found
+    while (defined(my $line = $self->read_line)) {
+        if (ref $line) {
+            $self->{next} = $line;
+            last;
+        }
+
+        #warn "DEBUG ignoring junk: '$line'\n";
+    }
+
+    unless ($self->{next}) {
+        warn "No entries found in $self->{n}\n";
+        close $self->{f} or warn "Can't close $self->{n}: $!\n";
+        return undef;
+    }
+
+    $self->advance;
+
+    return $self;
+}
+
+# Read a single line from log; if start of entry, return array ref of header
+# Otherwise just return the string
+sub read_line {
+    my $self = shift;
+
+    my $f = $self->{f};
+    my $line = <$f>;
+    chomp $line if defined $line;
+    return $line unless defined $line and $line =~ /
+        # Entry starts with [ at start of line
+        ^\[
+        # Followed by module:level, e.g., stats:debug
+        (\w+):(\w+)
+        # Followed by a timestamp
+        ,([^,]+),
+        # Followed by the location of the message
+        ([^\]]+)
+        # And then the first line of text
+        \](.*)
+    /x;
+    return {
+        mod => $1,
+        level => $2,
+        time => $3,
+        loc => $4,
+        msg => [$5]
+    };
+}
+
+sub advance {
+    my $self = shift;
+
+    $self->{cur} = $self->{next};
+    unless ($self->{next}) {
+        close $self->{f} or warn "Can't close $self->{n}: $!\n";
+        return undef;
+    }
+    $self->{next} = undef;
+    while (defined(my $line = $self->read_line)) {
+        if (ref $line) {
+            $self->{next} = $line;
+            last;
+        }
+        push @{$self->{cur}{msg}}, $line;
+    }
+    return 1;
+}
+
+sub cur_msg {
+    my $self = shift;
+    my $msg = $self->{n} . ": ";
+    my $c = $self->{cur};
+    unless ($c) {
+        $msg .= "EOF";
+        return $msg;
+    }
+
+    $msg .= sprintf "%s:%s:%s %s", $c->{time}, $c->{mod}, $c->{level}, join (' ', @{$c->{msg}});
+}
