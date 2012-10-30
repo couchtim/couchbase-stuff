@@ -9,6 +9,57 @@ use Data::Dumper;
 $Data::Dumper::Terse = 1;
 $Data::Dumper::Indent = 0;
 
+use Getopt::Long;
+Getopt::Long::Configure("bundling");
+
+my %opt;
+
+sub usage {
+    return <<EOF;
+Usage: $0 [options] ns_server.*.log
+
+Example:
+
+    $0 --181 node4/ns_server.*.log
+
+Options:
+
+    --181  -1   Logs are in 1.8.1 format (default is 2.0 format)
+
+EOF
+}
+
+GetOptions(\%opt,
+    '181|1!',
+    ) and @ARGV > 0 or die usage();
+
+if ($opt{'181'}) {
+    $::rx_entry = qr/
+        # Entry starts with [module:level], e.g., [stats:debug]
+        ^\[(\w+):(\w+)\]
+        # Followed by a timestamp
+        \ \[([^\]]+)\]
+        # Followed by the location of the message
+        \ \[([^\]]+)\]
+        # And then the first line of text
+        (.*)
+    /x;
+}
+else {
+    $::rx_entry = qr/
+        # Entry starts with [ at start of line
+        ^\[
+        # module:level, e.g., stats:debug
+        (\w+):(\w+)
+        # timestamp
+        ,([^,]+)
+        # location of the message
+        ,([^\]]+)
+        # first line of text
+        \](.*)
+    /x;
+}
+
 my @logs;
 foreach my $logname (@ARGV) {
     my $l = LogReader->new($logname);
@@ -89,18 +140,7 @@ sub read_line {
     my $f = $self->{f};
     my $line = <$f>;
     chomp $line if defined $line;
-    return $line unless defined $line and $line =~ /
-        # Entry starts with [ at start of line
-        ^\[
-        # Followed by module:level, e.g., stats:debug
-        (\w+):(\w+)
-        # Followed by a timestamp
-        ,([^,]+),
-        # Followed by the location of the message
-        ([^\]]+)
-        # And then the first line of text
-        \](.*)
-    /x;
+    return $line unless defined $line and $line =~ /$::rx_entry/o;
     return {
         mod => $1,
         level => $2,
@@ -138,5 +178,5 @@ sub cur_msg {
         return $msg;
     }
 
-    $msg .= sprintf "%s:%s:%s %s", $c->{time}, $c->{mod}, $c->{level}, join (' ', @{$c->{msg}});
+    $msg .= sprintf "%s:%s:%s:%s %s", $c->{time}, $c->{mod}, $c->{level}, $c->{loc}, join(' ', @{$c->{msg}});
 }
