@@ -1,5 +1,13 @@
 #! /usr/bin/env python
 
+# This script is in the public domain, and comes with NO WARRANTY OF ANY KIND
+
+# Reads a list of keys on stdin and deletes them from the
+# specified cluster.
+#
+# This program uses the memcached binary protocol, and is intended
+# to be used with Couchbase Server via moxi (port 11211).
+
 import fileinput
 from optparse import OptionParser
 import sys
@@ -44,7 +52,7 @@ for key in fileinput.input(args):
         count += 1
     except mc_bin_client.MemcachedError, e:
         errors += 1
-        print "DELETE ERROR '%s': %s" % (key, e)
+        print "DELETE ERROR '%s': %s" % (e, key)
 
 print "Done (deleted %d keys)" % (count,)
 
