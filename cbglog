@@ -72,7 +72,8 @@ while (@logs) {
     my $l = shift @logs;
 
     print $l->cur_msg, "\n"
-        unless $l->{cur}{mod} eq 'couchdb';
+        #unless $l->{cur}{mod} eq 'couchdb'
+        ;
 
     $l->advance;
     LogReader::put_reader_in_list(\@logs, $l);
