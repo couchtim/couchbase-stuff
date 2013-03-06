@@ -19,10 +19,12 @@ def main():
     usage = "%prog [opts] BUCKET_FILENAME (use -h for detailed help)"
     epilog = "Dump keys from Couchbase underlying SQLite data files."
     parser = optparse.OptionParser(usage=usage, epilog=epilog)
-    parser.add_option("-f", "--filter", default="",
-                      help="Filter keys to print by regex")
     parser.add_option("-a", "--all", action="store_true", default=False,
                       help="Dump all keys (no filter)")
+    parser.add_option("-f", "--filter", default="",
+                      help="Filter keys to print by regex")
+    parser.add_option("-t", "--ttl", action="store_true", default=False,
+                      help="Print TTL (expiry time) also")
     opts, args = parser.parse_args()
 
     if not (opts.all or opts.filter) or (opts.all and opts.filter):
@@ -88,12 +90,13 @@ def main():
 
     filter = re.compile(opts.filter) if opts.filter else False
 
+    print_format = "{0}\t{1}" if opts.ttl else "{1}"
     for kv, dbs in table_dbs.iteritems():
         if 'kv_' in kv:
             cur.execute(sql.format(kv))
             for k, exptime in cur:
                 if not filter or re.search(filter, k):
-                   print k
+                   print print_format.format(exptime, k)
             sys.stderr.write('.')
     sys.stderr.write('\n')
 
