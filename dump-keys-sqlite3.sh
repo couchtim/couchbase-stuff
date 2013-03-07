@@ -37,6 +37,7 @@ sqlite=/opt/couchbase/bin/sqlite3
 
 allkeys=0
 filter=
+ttl=0
 while getopts af:t name
 do
     case $name in
@@ -62,6 +63,12 @@ if [ $allkeys -eq 1 -a -n "$filter" -o $allkeys -eq 0 -a -z "$filter" ]; then
     exit 1
 fi
 
+egrep_filter () {
+    egrep "$filter";
+    # Grep returns 1 if no match; treat that as success
+    if [ $? -le 1 ]; then return 0; else return $?; fi
+}
+
 if [ -n "$filter" ]; then
     filter_func=egrep_filter
 else
@@ -77,25 +84,38 @@ else
     ttl_field=
 fi
 
-egrep_filter () { egrep "$filter"; }
-
-
 active=$("$sqlite" "$bucket" 'SELECT vbid FROM vbucket_states WHERE state LIKE "active"')
 [ $? -eq 0 ] || die "sqlite3 error reading active vbuckets for $bucket: $?"
 
-activeCount=$(echo "$active" | wc -l)
-[ $activeCount -gt 0 ] || die "No active vbuckets for $bucket on this host"
-note "Reading keys from $activeCount active vbuckets"
+active_count=$(echo "$active" | wc -l)
+[ $active_count -gt 0 ] || die "No active vbuckets for $bucket on this host"
 
-    for part in 0 1 2 3; do
-        for vbid in $active; do
-            [ $(expr "$vbid" \% 4) -eq $part ] || continue
+note "Reading keys from $active_count active vbuckets"
+
+for part in 0 1 2 3; do
+    for vbid in $active; do
+        [ $(expr "$vbid" \% 4) -eq $part ] || continue
+        file="$bucket-$part.mb"
+
+        # This is it! Sqlite CLI output goes to stdout
+        "$sqlite" "$file" "SELECT ${ttl_field}k FROM kv_$vbid"
+        e=$?
+
+        if [ $e -eq 0 ]; then
             # Print *something* for progress indication
             notef "."
-            file="$bucket-$part.mb"
-            "$sqlite" "$file" "SELECT ${ttl_field}k FROM kv_$vbid"
-        done
-    done \
-        | $filter_func
+        elif [ $e -eq 141 ]; then
+            # 141 = 128 + 13 (SIGPIPE); i.e., the filter func quit or was killed
+            break
+        else
+            die "sqlite3 error $e reading table 'kv_$vbid' from '$file'"
+        fi
+    done
+done \
+    | $filter_func
+
+if [ $? -ne 0 ]; then
+    die "error with filter (bad regex?)"
+fi
 
 notef "\nDone\n"
