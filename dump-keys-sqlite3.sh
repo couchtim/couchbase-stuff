@@ -20,6 +20,7 @@ Usage: $0 [options] /path/to/bucket-data/bucket
 Options:
   -a         Dump all keys (no filter)
   -f REGEX   Filter the list of keys on (egrep) REGEX
+  -t         Print TTL (expiry time) also
 
 Examples:
 
@@ -36,11 +37,12 @@ sqlite=/opt/couchbase/bin/sqlite3
 
 allkeys=0
 filter=
-while getopts af: name
+while getopts af:t name
 do
     case $name in
         a)  allkeys=1 ;;
         f)  filter=$OPTARG ;;
+        t)  ttl=1 ;;
         ?)  usage; exit 1 ;;
     esac
 done
@@ -66,6 +68,15 @@ else
     filter_func=cat
 fi
 
+if [ $ttl -eq 1 ]; then
+    # Interpolated into SQL SELECT list
+    ttl_field='exptime, '
+    # If filter anchors at beginning, ignore the TTL
+    filter=`echo "$filter" | sed 's,^\^,^\\d+\\|,'`
+else
+    ttl_field=
+fi
+
 egrep_filter () { egrep "$filter"; }
 
 
@@ -76,20 +87,15 @@ activeCount=$(echo "$active" | wc -l)
 [ $activeCount -gt 0 ] || die "No active vbuckets for $bucket on this host"
 note "Reading keys from $activeCount active vbuckets"
 
-(
     for part in 0 1 2 3; do
-        # Process each bucket-{0,1,2,3}.mb file in parallel
-        (
-            for vbid in $active; do
-                [ $(expr "$vbid" \% 4) -eq $part ] || continue
-                # Print *something* for progress indication
-                notef "."
-                file="$bucket-$part.mb"
-                "$sqlite" "$file" "SELECT k FROM kv_$vbid"
-            done
-        ) &
-    done
-    wait
-) | $filter_func
+        for vbid in $active; do
+            [ $(expr "$vbid" \% 4) -eq $part ] || continue
+            # Print *something* for progress indication
+            notef "."
+            file="$bucket-$part.mb"
+            "$sqlite" "$file" "SELECT ${ttl_field}k FROM kv_$vbid"
+        done
+    done \
+        | $filter_func
 
 notef "\nDone\n"
