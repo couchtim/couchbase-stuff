@@ -12,12 +12,9 @@ except:
 Please run it with a recent version of Python."""
     sys.exit(1)
 
-DEFAULT_HOST = 'localhost'
-DEFAULT_PORT = '11211'
-
 def main():
     usage = "%prog [opts] BUCKET_FILENAME (use -h for detailed help)"
-    epilog = "Dump keys from Couchbase underlying SQLite data files."
+    epilog = "Dump active keys from Couchbase underlying SQLite data files. This program must be run on every Couchbase node in a cluster to get complete results for a bucket."
     parser = optparse.OptionParser(usage=usage, epilog=epilog)
     parser.add_option("-a", "--all", action="store_true", default=False,
                       help="Dump all keys (no filter)")
@@ -28,6 +25,7 @@ def main():
     opts, args = parser.parse_args()
 
     if not (opts.all or opts.filter) or (opts.all and opts.filter):
+        parser.print_usage()
         sys.exit("One of -f or -a must be specified")
 
     if len(args) != 1:
