@@ -29,26 +29,15 @@ get_file 487885ce486f044a700738ab8bb443ec "$RPM"
 # See http://support.couchbase.com/entries/21374979-TAP-disconnect-causes-memory-leak-in-1-8-x-MB-6550-
 get_file b2cf96bd47a130ae7e7ceb7f5697500a "$HOTFIX"
 
-# Don't try to be clever here, it's ad-hoc solution
-hf="$work_dir/HOTFIX-MB-5343-MB-5624-MB-6550/bin/centos-64"
-if [ ! -d "$hf" ]; then
-    echo "Unpacking hotfix..."
-    (
-        unzip couchbase-server-1.8.1_HOTFIX-MB-5343-MB-5624-MB-6550.zip
-        cd HOTFIX-MB-5343-MB-5624-MB-6550
-        unzip bin.zip
-        cd bin
-        unzip centos-64.zip
-    )
+e=3 # Status 3 is normal for "not running"
+if [ -x /etc/init.d/couchbase-server ]; then
+    /etc/init.d/couchbase-server status || e=$?
 fi
 
-e=0
-/etc/init.d/couchbase-server status || e=$?
 if [ $e -eq 0 ]; then
     echo "Shutting down Couchbase service"
     sudo /etc/init.d/couchbase-server stop
 elif [ $e -ne 3 ]; then
-    # Status 3 is normal for "not running"
     die "Got exit code $e checking coucbhase-server status"
 fi
 
@@ -63,6 +52,19 @@ while pgrep -xl memcached || pgrep -xl beam.smp || pgrep -xl moxi; do
     sleep 1
 done
 
+
+# Don't try to be clever here, it's ad-hoc solution
+hf="$work_dir/HOTFIX-MB-5343-MB-5624-MB-6550/bin/centos-64"
+if [ ! -d "$hf" ]; then
+    echo "Unpacking hotfix..."
+    (
+        unzip couchbase-server-1.8.1_HOTFIX-MB-5343-MB-5624-MB-6550.zip
+        cd HOTFIX-MB-5343-MB-5624-MB-6550
+        unzip bin.zip
+        cd bin
+        unzip centos-64.zip
+    )
+fi
 
 echo "Installing main Couchbase package"
 # Use --replacepkgs in case we're already at desired version
