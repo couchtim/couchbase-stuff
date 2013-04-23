@@ -31,7 +31,8 @@ get_file b2cf96bd47a130ae7e7ceb7f5697500a "$HOTFIX"
 
 e=3 # Status 3 is normal for "not running"
 if [ -x /etc/init.d/couchbase-server ]; then
-    /etc/init.d/couchbase-server status || e=$?
+    /etc/init.d/couchbase-server status
+    e=$?
 fi
 
 if [ $e -eq 0 ]; then
