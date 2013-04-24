@@ -51,7 +51,7 @@ while pgrep -xl memcached || pgrep -xl beam.smp || pgrep -xl moxi; do
         die "Gave up waiting for Couchbase processes to exit. Kill them manually or wait longer, then retry."
     fi
     echo "Waiting for Couchbase processes to exit...." >&2
-    sleep 1
+    sleep 30
 done
 
 
