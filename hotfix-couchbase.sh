@@ -31,8 +31,9 @@ get_file b2cf96bd47a130ae7e7ceb7f5697500a "$HOTFIX"
 
 e=3 # Status 3 is normal for "not running"
 if [ -x /etc/init.d/couchbase-server ]; then
-    /etc/init.d/couchbase-server status
-    e=$?
+    # Since set -e is in force, the status call must be tested
+    e=0
+    /etc/init.d/couchbase-server status || e=$?
 fi
 
 if [ $e -eq 0 ]; then
@@ -49,7 +50,7 @@ while pgrep -xl memcached || pgrep -xl beam.smp || pgrep -xl moxi; do
     if [ $times -eq 0 ]; then
         die "Gave up waiting for Couchbase processes to exit. Kill them manually or wait longer, then retry."
     fi
-    echo "Waiting for Couchbase proceses to exit...." >&2
+    echo "Waiting for Couchbase processes to exit...." >&2
     sleep 1
 done
 
