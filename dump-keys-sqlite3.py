@@ -1,5 +1,7 @@
 #! /usr/bin/env python2.6
 
+# This script is in the public domain, and comes with NO WARRANTY OF ANY KIND
+
 import optparse
 import os
 import re
